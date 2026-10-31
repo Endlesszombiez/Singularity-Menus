@@ -1,0 +1,2 @@
+# Preserve the existing README's LF style when core.autocrlf is enabled.
+README.md text eol=lf

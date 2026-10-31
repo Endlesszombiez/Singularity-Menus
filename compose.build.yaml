@@ -1,0 +1,7 @@
+# Optional source-build override. Production only needs compose.yaml.
+services:
+  singularity:
+    image: singularity-menus:local
+    pull_policy: build
+    build:
+      context: .

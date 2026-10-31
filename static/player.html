@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Singularity · Live display</title>
+    <link rel="icon" href="/static/singularity-logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script type="module" src="/static/player.js"></script>
+  </head>
+  <body class="player-body">
+    <main id="display" aria-label="Live display">
+      <div class="player-message">Connecting to your display…</div>
+    </main>
+    <div id="connection" role="status" hidden></div>
+    <button
+      id="fullscreen"
+      title="Enter fullscreen"
+      aria-label="Enter fullscreen"
+    >
+      ⛶
+    </button>
+  </body>
+</html>
