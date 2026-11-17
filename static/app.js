@@ -420,7 +420,7 @@ function bindTaskDrag() {
 
 function screensHTML() {
   const screens = Object.entries(state.screens);
-  return `${pageHead("THE RIGHT BOARD. THE RIGHT PLACE.", "Give every screen a purpose.", "One permanent address per screen. Any browser on your network can display it.", `<button class="btn primary" data-action="add-screen">${icon("plus")}Add screen</button>`)}<div class="info-banner">${icon("link")}<p>Open a screen’s address on a TV, tablet or kiosk. Set the browser to full screen. Multiple devices can use the same address.</p></div><div class="screen-grid">${screens.map(([slug, s]) => `<article class="screen-card"><div class="screen-card-top"><span class="section-icon">${icon("screens")}</span><span class="badge ${s.online ? "green" : "neutral"}"><span class="dot ${s.online ? "done" : "todo"}"></span>${s.online ? "Connected" : "Not connected"}</span></div><h2>${esc(s.name)}</h2><div class="screen-board-label">${s.scheduled ? "Scheduled board" : "Default board"}</div><strong class="screen-board-name">${esc(state.boards[s.active_board]?.published?.name || "Unassigned")}</strong><div class="screen-address"><code>${esc(screenURL(slug))}</code><button class="icon-btn" title="Copy address" aria-label="Copy screen address" data-action="copy-url" data-slug="${esc(slug)}">${icon("copy")}</button></div><div class="screen-card-foot"><button class="small-link" data-action="edit-screen" data-slug="${esc(slug)}">Edit assignment</button><a class="btn compact" href="${esc(screenURL(slug))}" target="_blank" rel="noopener">Open display ${icon("arrow")}</a><button class="icon-btn" title="Delete screen" aria-label="Delete ${esc(s.name)}" data-action="delete-screen" data-slug="${esc(slug)}">${icon("trash")}</button></div><small class="muted">${s.last_seen ? `Last request ${new Date(s.last_seen * 1000).toLocaleString()}` : "Waiting for its first connection"}</small></article>`).join("") || '<div class="empty-state"><h3>Your screens start here.</h3><p>Add a screen and give it a published board.</p></div>'}</div><div class="workspace-footnote">${icon("shield")} Screen addresses are view-only and accessible to anyone on your LAN. Use a reserved server IP to keep bookmarks stable.</div>`;
+  return `${pageHead("THE RIGHT BOARD. THE RIGHT PLACE.", "Give every screen a purpose.", "One permanent address per screen. Any browser on your network can display it.", `<button class="btn primary" data-action="add-screen">${icon("plus")}Add screen</button>`)}<div class="info-banner">${icon("link")}<p>Open a screen’s address on a TV, tablet or kiosk. Set the browser to full screen. Multiple devices can use the same address.</p></div><div class="screen-grid">${screens.map(([slug, s]) => `<article class="screen-card"><div class="screen-card-top"><span class="section-icon">${icon("screens")}</span><span class="badge ${s.online ? "green" : "neutral"}"><span class="dot ${s.online ? "done" : "todo"}"></span>${s.online ? "Connected" : "Not connected"}</span></div><h2>${esc(s.name)}</h2><div class="screen-board-label">${s.mode === "static" ? "Static HTML page" : s.scheduled ? "Scheduled board" : "Default board"}</div><strong class="screen-board-name">${s.mode === "static" ? "HTML / CSS / JavaScript" : esc(state.boards[s.active_board]?.published?.name || "Unassigned")}</strong><div class="screen-address"><code>${esc(screenURL(slug))}</code><button class="icon-btn" title="Copy address" aria-label="Copy screen address" data-action="copy-url" data-slug="${esc(slug)}">${icon("copy")}</button></div><div class="screen-card-foot"><button class="small-link" data-action="edit-screen" data-slug="${esc(slug)}">Edit assignment</button><a class="btn compact" href="${esc(screenURL(slug))}" target="_blank" rel="noopener">Open display ${icon("arrow")}</a><button class="icon-btn" title="Delete screen" aria-label="Delete ${esc(s.name)}" data-action="delete-screen" data-slug="${esc(slug)}">${icon("trash")}</button></div><small class="muted">${s.last_seen ? `Last request ${new Date(s.last_seen * 1000).toLocaleString()}` : "Waiting for its first connection"}</small></article>`).join("") || '<div class="empty-state"><h3>Your screens start here.</h3><p>Add a screen and assign a board or static HTML page.</p></div>'}</div><div class="workspace-footnote">${icon("shield")} Screen addresses are view-only and accessible to anyone on your LAN. Use a reserved server IP to keep bookmarks stable.</div>`;
 }
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function scheduleHTML() {
@@ -487,15 +487,12 @@ function showModal(title, body, submitLabel, onSubmit) {
   modal.showModal();
 }
 function screenModal(slug) {
-  if (!Object.values(state.boards).some((r) => r.published)) {
-    toast("Publish a board before adding a screen.", true);
-    return;
-  }
   const screen = slug ? state.screens[slug] : null;
+  const selectedMode = screen?.mode || (Object.values(state.boards).some((r) => r.published) ? "board" : "static");
   showModal(
     screen ? "Edit screen assignment" : "Give your screen an address",
-    `<p class="muted">${screen ? "The permanent address stays the same when you change the board." : "Create a permanent web address for your TV or kiosk."}</p><label>Screen name<input name="name" required maxlength="80" value="${esc(screen?.name || "")}" placeholder="e.g. Assembly floor"></label>${!screen ? '<label>Screen address<input name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="60" placeholder="e.g. assembly-floor"><small>Lowercase letters, numbers and hyphens. This address is permanent.</small></label>' : `<div class="address-note">${esc(screenURL(slug))}</div>`}<label>Default board<select name="board" required>${boardOptions(screen?.board)}</select></label>`,
-    screen ? "Save assignment" : "Create screen",
+    `<p class="muted">${screen ? "The permanent address stays the same when you change its content." : "Create a permanent web address for your TV or kiosk."}</p><label>Screen name<input name="name" required maxlength="80" value="${esc(screen?.name || "")}" placeholder="e.g. Assembly floor"></label>${!screen ? '<label>Screen address<input name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="60" placeholder="e.g. assembly-floor"><small>Lowercase letters, numbers and hyphens. This address is permanent.</small></label>' : `<div class="address-note">${esc(screenURL(slug))}</div>`}<label>Content<select name="mode">${option("board", "Published board", selectedMode)}${option("static", "Static HTML / JavaScript", selectedMode)}</select></label><div id="screen-board-fields"><label>Default board<select name="board" required>${boardOptions(screen?.board)}</select></label></div><div id="screen-static-fields" hidden><p class="muted small">Upload or paste one self-contained HTML page with inline CSS and JavaScript (up to 1 MB). Embed images as data URLs. Separate files and network requests are not supported. The page fills this screen. Remove any schedule windows before switching to static content.</p><label>Upload HTML<input id="screen-html-file" type="file" accept=".html,.htm,text/html"></label><label>HTML page<textarea name="html" rows="12" spellcheck="false" placeholder="<!doctype html>…">${esc(screen?.html || "")}</textarea></label></div>`,
+    "Publish to screen",
     async (form) => {
       await api(
         slug ? `screens/${slug}` : "screens",
@@ -509,16 +506,44 @@ function screenModal(slug) {
       );
     },
   );
+  const form = modal.querySelector("form");
+  const mode = form.elements.mode;
+  const html = form.elements.html;
+  function updateMode() {
+    const isStatic = mode.value === "static";
+    modal.querySelector("#screen-board-fields").hidden = isStatic;
+    modal.querySelector("#screen-static-fields").hidden = !isStatic;
+    form.elements.board.disabled = isStatic;
+    html.disabled = !isStatic;
+    html.required = isStatic;
+  }
+  mode.addEventListener("change", updateMode);
+  updateMode();
+  modal.querySelector("#screen-html-file").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      if (file.size > 1024 * 1024) throw new Error("Choose an HTML file up to 1 MB.");
+      html.value = await file.text();
+      mode.value = "static";
+      updateMode();
+      modal.querySelector("#modal-error").textContent = "";
+    } catch (error) {
+      event.target.value = "";
+      modal.querySelector("#modal-error").textContent = error.message;
+    }
+  });
 }
 function scheduleModal(index) {
-  if (!Object.keys(state.screens).length) {
-    toast("Add a screen first.", true);
+  if (!Object.values(state.screens).some((s) => s.mode !== "static")) {
+    toast("Add a screen with a published board before scheduling content.", true);
     return;
   }
   const rule = index === undefined ? null : state.schedules[index];
   showModal(
     rule ? "Edit time window" : "Plan a time window",
     `<label>Screen<select name="screen" required>${Object.entries(state.screens)
+      .filter(([, s]) => s.mode !== "static")
       .map(([id, s]) => option(id, s.name, rule?.screen))
       .join(
         "",

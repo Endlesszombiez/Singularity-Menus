@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { boardHTML, pageCount, updateClocks } from "../static/board.js";
+import { boardHTML, pageCount, updateClocks, esc } from "../static/board.js";
 
 // Exercise the real player controller with minimal DOM/network/timer adapters.
 // No browser or third-party DOM implementation is required.
@@ -23,6 +23,7 @@ const run = new Function(
   "boardHTML",
   "pageCount",
   "updateClocks",
+  "esc",
   "Date",
   source + "\nreturn {refresh};",
 );
@@ -103,6 +104,7 @@ function harness(responses, cached) {
     boardHTML,
     pageCount,
     updateClocks,
+    esc,
     FakeDate,
   );
   return {
@@ -180,4 +182,31 @@ test("player page cycling ignores completed tasks without empty extra pages", as
   env.tick(6);
   assert.ok(env.display.innerHTML.includes("Task 7"));
   assert.ok(!env.display.innerHTML.includes("2 / 2"));
+});
+
+
+test("static pages are sandboxed, cached and do not reload on page timers or unchanged polls", async () => {
+  const data = { ...content(), board: null, mode: "static", html: '<h1>Welcome</h1><script>document.body.dataset.ran = "yes";</script>' };
+  const env = harness([{ status: 200, data }, { status: 200, data }]);
+  await flush();
+  assert.ok(env.display.innerHTML.includes('sandbox="allow-scripts"'));
+  assert.ok(!env.display.innerHTML.includes('allow-same-origin'));
+  assert.ok(env.display.innerHTML.includes('&lt;script&gt;'));
+  assert.ok(env.display.innerHTML.includes("default-src &#39;none&#39;"));
+  assert.equal(JSON.parse(env.storage.get(cacheKey)).html, data.html);
+  env.display.innerHTML = "Running page";
+  env.tick(60);
+  await env.player.refresh();
+  assert.equal(env.display.innerHTML, "Running page");
+});
+
+test("static cached pages survive connection loss and switch back to task boards", async () => {
+  const cached = { ...content(), board: null, mode: "static", html: "<h1>Saved page</h1>" };
+  const env = harness([new Error("Offline"), { status: 200, data: content("Back to tasks", "v2") }], cached);
+  await flush();
+  assert.ok(env.display.innerHTML.includes("Saved page"));
+  assert.equal(env.connection.hidden, false);
+  await env.player.refresh();
+  assert.ok(env.display.innerHTML.includes("Back to tasks"));
+  assert.ok(!env.display.innerHTML.includes("iframe"));
 });

@@ -309,3 +309,62 @@ def test_completed_tasks_remain_in_saved_and_published_content(admin):
     backup = admin.call("GET", "backup").json
     assert admin.call("POST", "restore", backup).status_code == 200
     assert admin.state()["boards"][bid]["draft"]["auto_date"] is True
+
+
+def test_static_page_is_published_to_one_screen_and_restored(admin, tmp_path):
+    original = admin.client.get("/api/display/production-floor").json
+    html = '<!doctype html><h1>Welcome</h1><script>document.body.dataset.ready = "yes"</script>'
+    page = {"slug": "lobby", "name": "Lobby", "mode": "static", "html": html}
+    assert admin.call("POST", "screens", page).status_code == 200
+    public = admin.client.get("/api/display/lobby").json
+    assert public["mode"] == "static"
+    assert public["html"] == html
+    assert public["board"] is None
+    assert public["scheduled"] is False
+    assert admin.state()["screens"]["lobby"]["online"] is True
+    assert admin.client.get("/api/display/production-floor").json["revision"] == original["revision"]
+    changed = {**page, "html": "<h1>Updated</h1>"}
+    assert admin.call("PUT", "screens/lobby", changed).status_code == 200
+    assert admin.client.get("/api/display/lobby").json["revision"] != public["revision"]
+    backup = admin.call("GET", "backup").json
+    assert admin.call("DELETE", "screens/lobby", {}).status_code == 200
+    assert admin.call("POST", "restore", backup).status_code == 200
+    assert admin.client.get("/api/display/lobby").json["html"] == changed["html"]
+    restarted = create_app(tmp_path, testing=True).test_client()
+    assert restarted.get("/api/display/lobby").json["html"] == changed["html"]
+    bid = admin.state()["screens"]["production-floor"]["board"]
+    assert admin.call("PUT", "screens/lobby", {"name": "Lobby", "board": bid}).status_code == 200
+    restored = admin.client.get("/api/display/lobby").json
+    assert restored["board"]["id"] == bid
+    assert "html" not in restored
+
+
+@pytest.mark.parametrize("change", [{"html": ""}, {"html": "  "}, {"html": 123}, {"html": "é" * (512 * 1024 + 1)}, {"mode": "unknown"}])
+def test_invalid_static_page_is_atomic(admin, change):
+    before = admin.state()["screens"]
+    page = {"name": "Static", "mode": "static", "html": "<h1>Hello</h1>", **change}
+    assert admin.call("PUT", "screens/production-floor", page).status_code == 400
+    assert admin.state()["screens"] == before
+
+
+def test_static_pages_reject_schedules_and_invalid_backups(admin):
+    rule = schedule_rule(admin)
+    assert admin.call("PUT", "schedules", [rule]).status_code == 200
+    page = {"name": "Static", "mode": "static", "html": "<h1>Hello</h1>"}
+    assert admin.call("PUT", "screens/production-floor", page).status_code == 409
+    assert admin.call("PUT", "schedules", []).status_code == 200
+    assert admin.call("PUT", "screens/production-floor", page).status_code == 200
+    assert admin.call("PUT", "schedules", [rule]).status_code == 400
+    backup = admin.call("GET", "backup").json
+    backup["state"]["screens"]["production-floor"]["html"] = 123
+    assert admin.call("POST", "restore", backup).status_code == 400
+    assert admin.client.get("/api/display/production-floor").json["html"] == page["html"]
+
+
+def test_static_scripts_policy_is_limited_to_display_shell(app, admin):
+    for path in ("/", "/admin", "/api/state", "/static/player.js"):
+        assert "'unsafe-inline'" not in admin.client.get(path).headers["Content-Security-Policy"].split("script-src ")[1].split(";")[0]
+    assert "script-src 'self' 'unsafe-inline'" in admin.client.get("/display/production-floor").headers["Content-Security-Policy"]
+    anonymous = app.test_client()
+    csrf = anonymous.get("/api/session").json["csrf"]
+    assert anonymous.post("/api/screens", json={"slug": "bad", "name": "Bad", "mode": "static", "html": "<script>1</script>"}, headers={"X-CSRF-Token": csrf}).status_code == 401

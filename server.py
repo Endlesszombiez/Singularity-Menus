@@ -83,6 +83,25 @@ def validate_board(value):
     return result
 
 
+def validate_screen(value, state):
+    require(isinstance(value, dict), "Invalid screen.")
+    result = {"name": text(value.get("name"), "Screen name", 80, True)}
+    mode = value.get("mode", "board")
+    require(mode in ("board", "static"), "Choose a board or static HTML page.")
+    result["mode"] = mode
+    if mode == "static":
+        html = value.get("html")
+        require(isinstance(html, str) and html.strip() and len(html.encode("utf-8")) <= 1024 * 1024,
+                "Enter a self-contained HTML page up to 1 MB.")
+        result.update(board=None, html=html)
+    else:
+        bid = value.get("board")
+        require(isinstance(bid, str) and bid in state["boards"] and state["boards"][bid]["published"],
+                "Publish a board before assigning it to a screen.")
+        result["board"] = bid
+    return result
+
+
 def validate_settings(value):
     require(isinstance(value, dict), "Invalid settings.")
     site_name = text(value.get("site_name"), "Workspace name", 80, True)
@@ -110,6 +129,7 @@ def validate_rules(rules, state):
         screen, board = rule.get("screen"), rule.get("board")
         require(isinstance(screen, str) and screen in state["screens"], "Choose an existing screen.")
         require(isinstance(board, str) and board in state["boards"] and state["boards"][board]["published"], "Choose a published board.")
+        require(state["screens"][screen].get("mode", "board") == "board", "Static HTML screens cannot have schedule windows.")
         days = rule.get("days")
         require(isinstance(days, list) and 1 <= len(days) <= 7 and all(type(d) is int and 0 <= d <= 6 for d in days) and len(set(days)) == len(days), "Choose at least one distinct weekday.")
         for key in ("start", "end"):
@@ -124,6 +144,8 @@ def validate_rules(rules, state):
 
 
 def resolve_board(state, slug, instant=None):
+    if state["screens"][slug].get("mode") == "static":
+        return None, False
     local = (instant or datetime.now(timezone.utc)).astimezone(ZoneInfo(state["settings"]["timezone"]))
     day, minute = local.weekday(), local.hour * 60 + local.minute
     for rule in state["schedules"]:
@@ -239,6 +261,10 @@ def create_app(data_dir=None, testing=False):
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
+        if request.path.startswith("/display/"):
+            # Inline scripts run only inside opaque, sandboxed static page frames.
+            response.headers["Content-Security-Policy"] = response.headers["Content-Security-Policy"].replace(
+                "script-src 'self'", "script-src 'self' 'unsafe-inline'; font-src 'self' data:")
         if request.path.startswith("/api/") or request.path in ("/", "/admin") or request.path.startswith("/display/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -410,9 +436,10 @@ def create_app(data_dir=None, testing=False):
                     require(isinstance(slug, str) and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) and len(slug) <= 60, "Screen address: use up to 60 lowercase letters, numbers and hyphens.")
                     require(slug not in state["screens"], "That screen address is already in use.", 409)
                     require(len(state["screens"]) < 100, "V1 supports up to 100 logical screens.")
-                board = body.get("board")
-                require(isinstance(board, str) and board in state["boards"] and state["boards"][board]["published"], "Publish a board before assigning it to a screen.")
-                state["screens"][slug] = {"name": text(body.get("name"), "Screen name", 80, True), "board": board}
+                screen = validate_screen(body, state)
+                require(screen["mode"] != "static" or not any(r["screen"] == slug for r in state["schedules"]),
+                        "Remove this screen's schedule windows before publishing a static page.", 409)
+                state["screens"][slug] = screen
             save_state(connection, state)
         return jsonify(ok=True)
 
@@ -483,9 +510,7 @@ def create_app(data_dir=None, testing=False):
         require(isinstance(raw.get("screens"), dict) and len(raw["screens"]) <= 100, "Invalid backup screens.")
         for slug, screen in raw["screens"].items():
             require(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) and len(slug) <= 60 and isinstance(screen, dict), "Invalid backup screen.")
-            bid = screen.get("board")
-            require(isinstance(bid, str) and bid in restored["boards"] and restored["boards"][bid]["published"], "Backup screen references an unpublished or missing board.")
-            restored["screens"][slug] = {"name": text(screen.get("name"), "Screen name", 80, True), "board": bid}
+            restored["screens"][slug] = validate_screen(screen, restored)
         restored["schedules"] = validate_rules(raw.get("schedules"), restored)
         if "assignment_history" in raw:
             history = raw["assignment_history"]
@@ -508,9 +533,11 @@ def create_app(data_dir=None, testing=False):
             state = read_state(connection)
             require(slug in state["screens"], "This screen does not exist. Ask your administrator to check its address.", 404)
             bid, scheduled = resolve_board(state, slug)
-            board = state["boards"][bid]["published"]
+            board = state["boards"][bid]["published"] if bid else None
             connection.execute("INSERT INTO presence VALUES (?, ?) ON CONFLICT(slug) DO UPDATE SET seen=excluded.seen", (slug, time.time()))
         content = {"board": board, "settings": state["settings"], "screen_name": state["screens"][slug]["name"], "scheduled": scheduled}
+        if state["screens"][slug].get("mode") == "static":
+            content.update(mode="static", html=state["screens"][slug]["html"])
         content["revision"] = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
         content["server_time"] = now()
         return jsonify(content)

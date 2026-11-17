@@ -3739,3 +3739,16 @@ dialog.preview-modal footer {
 .entry-card.dragging { opacity: 0.55; border-color: var(--orange); }
 .entry-card.drop-before { box-shadow: 0 -3px 0 var(--orange); }
 .entry-card.drop-after { box-shadow: 0 3px 0 var(--orange); }
+
+/* Static pages use the full viewport; the embedded page controls its own layout. */
+.player-body .static-page {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+#screen-static-fields textarea {
+  font-family: Consolas, monospace;
+  font-size: 0.85rem;
+}

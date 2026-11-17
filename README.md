@@ -112,6 +112,14 @@ The override builds `singularity-menus:local`. Production uses only `compose.yam
 
 Screen status means its address was requested in the last 20 seconds. It confirms browser contact, not that the physical panel is powered on. Multiple devices sharing an address appear as one logical screen.
 
+### Static HTML / JavaScript screens
+
+In **Screens**, add a screen or edit its assignment, choose **Static HTML / JavaScript**, then upload an `.html` file or paste your page and click **Publish to screen**. Open the screen's permanent `/display/...` address on the target TV or kiosk. Only that logical screen changes; devices sharing its address show the same page. Updates arrive within about five seconds.
+
+Use a self-contained HTML document with inline CSS and JavaScript (up to 1 MB). Embed images and fonts as data URLs. Separate asset files, external scripts, network requests and server-side code are not supported. The page fills the viewport and controls its own responsive layout. JavaScript runs in an isolated sandbox without access to the editor or its session. Static pages are included in backups and retained as last received content when a running player loses its connection.
+
+Remove a screen's schedule windows before switching it to static content. To return to task boards, choose **Published board** and publish the assignment.
+
 ### Production task list
 
 Each task has a title, owner, work-order/notes field, due time, priority (Normal, High, Urgent) and status (To do, In progress, Done, Blocked). The board summarizes total tasks, work in progress, completed tasks and blockers. Tasks remain in the order you choose.

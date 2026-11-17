@@ -1,4 +1,4 @@
-import { boardHTML, pageCount, updateClocks } from "./board.js";
+import { boardHTML, pageCount, updateClocks, esc } from "./board.js";
 
 const display = document.querySelector("#display");
 const connection = document.querySelector("#connection");
@@ -19,6 +19,12 @@ function fit() {
 }
 function render() {
   if (!current) return;
+  if (current.mode === "static") {
+    const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+    const html = `<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}">` + current.html;
+    display.innerHTML = `<iframe class="static-page" title="Static screen page" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${esc(html)}"></iframe>`;
+    return;
+  }
   display.innerHTML = boardHTML(current.board, current.settings, page);
   updateClocks(display, current.settings.timezone);
   fit();
@@ -29,7 +35,7 @@ function offline(message) {
 }
 try {
   const cached = JSON.parse(localStorage.getItem(key));
-  if (cached?.board && cached?.settings) {
+  if ((cached?.board || (cached?.mode === "static" && typeof cached.html === "string")) && cached?.settings) {
     current = cached;
     render();
     offline("Reconnecting · Showing last received content");
@@ -61,7 +67,7 @@ async function refresh() {
     if (current?.revision !== data.revision) {
       current = data;
       page = 0;
-      nextPage = Date.now() + data.board.page_seconds * 1000;
+      nextPage = Date.now() + (data.board?.page_seconds || 15) * 1000;
       render();
       try {
         localStorage.setItem(key, JSON.stringify(data));
@@ -83,7 +89,7 @@ async function refresh() {
 }
 addEventListener("resize", fit);
 setInterval(() => {
-  if (!current) return;
+  if (!current || current.mode === "static") return;
   updateClocks(display, current.settings.timezone);
   if (Date.now() >= nextPage) {
     page =
