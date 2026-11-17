@@ -128,4 +128,5 @@ def new_board(template):
     return {"id": uuid4().hex, "template": template, "name": spec["name"], "theme": 0,
             "title": spec["title"], "subtitle": spec["subtitle"], "footer": spec["footer"],
             "date": date.today().isoformat() if template == "production" else "",
+            "auto_date": template == "production",
             "page_seconds": 15, "items": deepcopy(spec["items"])}

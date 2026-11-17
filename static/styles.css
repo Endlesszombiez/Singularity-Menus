@@ -3690,3 +3690,52 @@ dialog.preview-modal footer {
     animation: none !important;
   }
 }
+
+/* Production editor controls */
+.auto-date-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.auto-date-toggle input {
+  appearance: none;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 21px;
+  min-height: 0;
+  padding: 2px;
+  margin: 0;
+  border-radius: 20px;
+  background: #cbd0d8;
+  cursor: pointer;
+}
+.auto-date-toggle input::before {
+  content: "";
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.15s;
+}
+.auto-date-toggle input:checked { background: var(--orange); }
+.auto-date-toggle input:checked::before { transform: translateX(15px); }
+.auto-date-toggle small { display: block; margin-top: 4px; }
+.assignee-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.assignee-pill {
+  border: 1px solid #f2d4c8;
+  border-radius: 20px;
+  background: #fff3ed;
+  color: #a94b29;
+  padding: 4px 9px;
+  font-size: 0.68rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.assignee-pill:hover { background: #ffe4d6; border-color: var(--orange); }
+.entry-header > span { display: flex; align-items: center; gap: 6px; }
+.entry-header .drag-handle { cursor: grab; touch-action: none; user-select: none; }
+.entry-header .drag-handle:active { cursor: grabbing; }
+.entry-card.dragging { opacity: 0.55; border-color: var(--orange); }
+.entry-card.drop-before { box-shadow: 0 -3px 0 var(--orange); }
+.entry-card.drop-after { box-shadow: 0 3px 0 var(--orange); }

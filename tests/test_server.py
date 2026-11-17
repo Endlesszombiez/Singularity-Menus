@@ -254,3 +254,58 @@ def test_sqlite_survives_restart(tmp_path):
 @pytest.mark.parametrize("path,method", [("boards","POST"),("settings","PUT"),("restore","POST"),("screens","POST"),("password","PUT")])
 def test_malformed_json_body_returns_400_not_500(admin, path, method):
     assert admin.call(method,path,["unexpected"]).status_code == 400
+
+
+def test_auto_date_persists_and_legacy_boards_keep_fixed_dates(admin):
+    bid = admin.create()
+    draft = admin.state()["boards"][bid]["draft"]
+    assert draft["auto_date"] is True
+    draft["date"] = "2026-11-17"
+    assert admin.save(bid, draft, publish=True).status_code == 200
+    assert admin.state()["boards"][bid]["published"]["auto_date"] is True
+    del draft["auto_date"]
+    assert admin.save(bid, draft).status_code == 200
+    saved = admin.state()["boards"][bid]["draft"]
+    assert saved["auto_date"] is False
+    assert saved["date"] == "2026-11-17"
+    draft["auto_date"] = "true"
+    assert admin.save(bid, draft).status_code == 400
+
+
+def test_assignment_history_counts_saved_usage_without_recounting_publish_or_reorder(admin):
+    bid = admin.create()
+    draft = admin.state()["boards"][bid]["draft"]
+    base = deepcopy(draft["items"][0])
+    draft["items"] = [dict(base, owner="Team 1") for _ in range(50)] + [dict(base, owner="Josh")]
+    assert admin.save(bid, draft).status_code == 200
+    draft["items"] = [dict(base, owner="Team 2") for _ in range(54)]
+    assert admin.save(bid, draft).status_code == 200
+    history = admin.state()["assignment_history"]
+    assert history["Team 1"] == 50
+    assert history["Team 2"] == 54
+    assert history["Josh"] == 1
+    draft["items"].reverse()
+    assert admin.save(bid, draft, publish=True).status_code == 200
+    assert admin.state()["assignment_history"] == history
+    draft["items"].append(deepcopy(draft["items"][0]))
+    assert admin.save(bid, draft).status_code == 200
+    assert admin.state()["assignment_history"]["Team 2"] == 55
+    backup = admin.call("GET", "backup").json
+    assert admin.call("POST", "restore", backup).status_code == 200
+    assert admin.state()["assignment_history"]["Team 2"] == 55
+    del backup["state"]["assignment_history"]
+    assert admin.call("POST", "restore", backup).status_code == 200
+    assert admin.state()["assignment_history"]["Team 2"] == 55
+
+
+def test_completed_tasks_remain_in_saved_and_published_content(admin):
+    bid = admin.create()
+    draft = admin.state()["boards"][bid]["draft"]
+    draft["items"][0]["status"] = "Done"
+    assert admin.save(bid, draft, publish=True).status_code == 200
+    record = admin.state()["boards"][bid]
+    assert record["draft"]["items"][0]["status"] == "Done"
+    assert record["published"]["items"] == draft["items"]
+    backup = admin.call("GET", "backup").json
+    assert admin.call("POST", "restore", backup).status_code == 200
+    assert admin.state()["boards"][bid]["draft"]["auto_date"] is True

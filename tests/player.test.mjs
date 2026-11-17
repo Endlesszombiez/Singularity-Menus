@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { boardHTML, capacity, updateClocks } from "../static/board.js";
+import { boardHTML, pageCount, updateClocks } from "../static/board.js";
 
 // Exercise the real player controller with minimal DOM/network/timer adapters.
 // No browser or third-party DOM implementation is required.
@@ -21,7 +21,7 @@ const run = new Function(
   "innerWidth",
   "innerHeight",
   "boardHTML",
-  "capacity",
+  "pageCount",
   "updateClocks",
   "Date",
   source + "\nreturn {refresh};",
@@ -101,7 +101,7 @@ function harness(responses, cached) {
     1920,
     1080,
     boardHTML,
-    capacity,
+    pageCount,
     updateClocks,
     FakeDate,
   );
@@ -167,4 +167,17 @@ test("shows connection loss after a live response and recovers on the next revis
   assert.equal(env.connection.hidden, true);
   assert.ok(env.display.innerHTML.includes("Next shift"));
   assert.equal(JSON.parse(env.storage.get(cacheKey)).revision, "v2");
+});
+
+
+test("player page cycling ignores completed tasks without empty extra pages", async () => {
+  const data = content();
+  data.board.items.slice(0, 7).forEach((item) => item.status = "Done");
+  const env = harness([{ status: 200, data }]);
+  await flush();
+  assert.ok(env.display.innerHTML.includes("Task 7"));
+  assert.ok(!env.display.innerHTML.includes("Task 0"));
+  env.tick(6);
+  assert.ok(env.display.innerHTML.includes("Task 7"));
+  assert.ok(!env.display.innerHTML.includes("2 / 2"));
 });

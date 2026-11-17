@@ -33,12 +33,20 @@ export function dateLabel(day) {
     day: "numeric",
   });
 }
+export function currentDate(zone = "America/New_York", instant = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(instant);
+  const get = (type) => parts.find((part) => part.type === type).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+export const visibleItems = (board) => board.template === "production"
+  ? board.items.filter((item) => item.status !== "Done") : board.items;
+export const pageCount = (board) => Math.max(1,
+  Math.ceil(visibleItems(board).length / capacity(board.template)));
 export function boardHTML(board, settings = {}, page = 0) {
-  const pages = Math.max(
-    1,
-    Math.ceil(board.items.length / capacity(board.template)),
-  );
-  const rows = board.items.slice(
+  const pages = pageCount(board);
+  const rows = visibleItems(board).slice(
     (page % pages) * capacity(board.template),
     ((page % pages) + 1) * capacity(board.template),
   );
@@ -51,7 +59,7 @@ export function boardHTML(board, settings = {}, page = 0) {
   let body;
   if (board.template === "production") {
     body = `<div class="production-summary"><div><strong>${total}</strong> tasks today</div><div><span class="dot progress"></span><strong>${inProgress}</strong> in progress</div><div><span class="dot done"></span><strong>${done}</strong> complete</div>${blocked ? `<div><span class="dot blocked"></span><strong>${blocked}</strong> blocked</div>` : ""}<div class="completion">${total ? Math.round((done / total) * 100) : 0}% complete <span class="progress-track"><i style="width:${total ? (done / total) * 100 : 0}%"></i></span></div></div>
-    <div class="task-table"><div class="task-head"><span>Task / work order</span><span>Assigned to</span><span>Due</span><span>Status</span></div>${rows.map((i) => `<div class="task-row ${i.status === "Done" ? "is-done" : ""}"><div class="task-name"><span class="task-check ${statusClass(i.status)}">${i.status === "Done" ? "✓" : i.status === "Blocked" ? "!" : ""}</span><div><strong>${esc(i.title)}</strong><small>${esc(i.detail)}</small></div>${i.priority !== "Normal" ? `<span class="priority">${esc(i.priority)}</span>` : ""}</div><span class="task-owner">${esc(i.owner)}</span><span class="task-due">${esc(i.due || "—")}</span><span class="status ${statusClass(i.status)}">${esc(i.status)}</span></div>`).join("")}</div>`;
+    <div class="task-table"><div class="task-head"><span>Task / work order</span><span>Assigned to</span><span>Due</span><span>Status</span></div>${rows.map((i) => `<div class="task-row ${i.status === "Done" ? "is-done" : ""}"><div class="task-name"><span class="task-check ${statusClass(i.status)}">${i.status === "Done" ? "✓" : i.status === "Blocked" ? "!" : ""}</span><div><strong>${esc(i.title)}</strong><small>${esc(i.detail)}</small></div>${i.priority !== "Normal" ? `<span class="priority">${esc(i.priority)}</span>` : ""}</div><span class="task-owner">${esc(i.owner)}</span><span class="task-due">${esc(i.due || "—")}</span><span class="status ${statusClass(i.status)}">${esc(i.status)}</span></div>`).join("")}</div>${!visibleItems(board).length ? '<div class="empty-board">All tasks complete.</div>' : ""}`;
   } else if (board.template === "metrics") {
     body = `<div class="metric-grid">${rows
       .map((i) => {
@@ -67,7 +75,7 @@ export function boardHTML(board, settings = {}, page = 0) {
   } else {
     body = `<div class="info-grid layout-${esc(board.template)}">${rows.map((i, index) => `<article><span class="info-label">${board.template === "safety" ? String(index + 1 + page * capacity(board.template)).padStart(2, "0") + " / " : ""}${esc(i.owner)}</span><h2>${esc(i.title)}</h2><p>${esc(i.detail)}</p>${board.template === "welcome" ? '<span class="direction">↗</span>' : ""}</article>`).join("")}</div>`;
   }
-  return `<section class="board template-${esc(board.template)} theme-${Number(board.theme)}"><header class="board-top"><span class="board-brand"><i></i>${esc(settings.site_name || "Singularity workspace")}</span><span class="board-date">${esc(dateLabel(board.date))}</span></header><div class="board-heading"><div><div class="board-eyebrow">${esc({ production: "Daily operations", briefing: "Shift handover", announcements: "Team noticeboard", schedule: "On the agenda", metrics: "At a glance", menu: "Fresh from our kitchen", safety: "Look out for each other", welcome: "Make yourself at home" }[board.template])}</div><h1>${esc(board.title)}</h1><p>${esc(board.subtitle)}</p></div>${board.template === "production" ? '<span class="shift-badge"><span class="dot done"></span> SHIFT PLAN</span>' : ""}</div><div class="board-content">${total ? body : '<div class="empty-board">No entries to show yet.</div>'}</div><footer class="board-footer"><span>${esc(board.footer)}</span><span class="board-page">${pages > 1 ? `${(page % pages) + 1} / ${pages} · ` : ""}<time data-clock></time></span></footer></section>`;
+  return `<section class="board template-${esc(board.template)} theme-${Number(board.theme)}"><header class="board-top"><span class="board-brand"><i></i>${esc(settings.site_name || "Singularity workspace")}</span><span class="board-date" ${board.auto_date ? "data-auto-date" : ""}>${esc(dateLabel(board.auto_date ? currentDate(settings.timezone) : board.date))}</span></header><div class="board-heading"><div><div class="board-eyebrow">${esc({ production: "Daily operations", briefing: "Shift handover", announcements: "Team noticeboard", schedule: "On the agenda", metrics: "At a glance", menu: "Fresh from our kitchen", safety: "Look out for each other", welcome: "Make yourself at home" }[board.template])}</div><h1>${esc(board.title)}</h1><p>${esc(board.subtitle)}</p></div>${board.template === "production" ? '<span class="shift-badge"><span class="dot done"></span> SHIFT PLAN</span>' : ""}</div><div class="board-content">${total ? body : '<div class="empty-board">No entries to show yet.</div>'}</div><footer class="board-footer"><span>${esc(board.footer)}</span><span class="board-page">${pages > 1 ? `${(page % pages) + 1} / ${pages} · ` : ""}<time data-clock></time></span></footer></section>`;
 }
 
 export function updateClocks(root, zone = "America/New_York") {
@@ -75,6 +83,9 @@ export function updateClocks(root, zone = "America/New_York") {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: zone,
+  });
+  root.querySelectorAll("[data-auto-date]").forEach((el) => {
+    el.textContent = dateLabel(currentDate(zone));
   });
   root
     .querySelectorAll("[data-clock]")

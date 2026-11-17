@@ -1,4 +1,4 @@
-import { boardHTML, capacity, updateClocks } from "./board.js";
+import { boardHTML, pageCount, updateClocks } from "./board.js";
 
 const display = document.querySelector("#display");
 const connection = document.querySelector("#connection");
@@ -88,12 +88,7 @@ setInterval(() => {
   if (Date.now() >= nextPage) {
     page =
       (page + 1) %
-      Math.max(
-        1,
-        Math.ceil(
-          current.board.items.length / capacity(current.board.template),
-        ),
-      );
+      pageCount(current.board);
     nextPage = Date.now() + current.board.page_seconds * 1000;
     render();
   }

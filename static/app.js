@@ -1,4 +1,6 @@
-import { esc, boardHTML, fitBoards, updateClocks, capacity } from "./board.js";
+import { esc, boardHTML, fitBoards, updateClocks, capacity, currentDate, pageCount } from "./board.js";
+
+import { moveTask, duplicateTask, topAssignees } from "./production.js";
 
 const root = document.querySelector("#app");
 const modal = document.querySelector("#modal");
@@ -281,16 +283,26 @@ function templatesHTML() {
 function editorHTML() {
   const spec = catalog[editor.template];
   const record = state.boards[editor.id];
-  return `<div class="editor-toolbar"><div><button class="icon-btn" data-nav="boards" aria-label="Back to boards">${icon("back")}</button><div><h1>${esc(editor.name)}</h1><span id="save-status">${dirty ? "Unsaved changes" : record.published_revision === record.revision ? "Published · All changes saved" : "Draft · Not published"}</span></div></div><div><button class="btn" data-action="preview-editor">${icon("eye")}<span>Preview</span></button><button class="btn" data-action="save-board">Save draft</button><button class="btn primary" data-action="publish-board">${icon("arrow")}Publish board</button></div></div><div class="editor-layout"><form id="editor-form" class="editor-fields"><section class="panel"><div class="panel-heading"><span class="section-icon">${icon(spec.icon)}</span><div><h2>Make it your board</h2><p>${esc(spec.name)}</p></div></div><label>Board name <small>Only shown in your workspace</small><input data-board-key="name" maxlength="80" required value="${esc(editor.name)}"></label><label>Display title<input data-board-key="title" maxlength="100" required value="${esc(editor.title)}"></label><label>Subtitle<input data-board-key="subtitle" maxlength="180" value="${esc(editor.subtitle)}"></label>${editor.template === "production" ? `<label>Plan date <small>Shown on the display; update for each shift</small><input type="date" data-board-key="date" value="${esc(editor.date)}"></label>` : ""}</section><section class="panel entries-panel"><div class="panel-heading"><div><h2>${editor.template === "production" ? "Production tasks" : "Board entries"} <span class="count-pill">${editor.items.length}</span></h2><p>Entries appear in this order on your display.</p></div><button type="button" class="btn compact" data-action="add-entry">${icon("plus")}Add</button></div><div id="entry-list">${entryListHTML()}</div>${!editor.items.length ? '<p class="empty-inline">Add your first entry to bring this board to life.</p>' : ""}<button type="button" class="btn full dashed" data-action="add-entry">${icon("plus")}Add ${editor.template === "production" ? "task" : "entry"}</button></section><section class="panel"><h2>The finishing touches</h2><label>Footer message<textarea data-board-key="footer" maxlength="250" rows="2">${esc(editor.footer)}</textarea></label><label>Seconds per page <small>Long boards cycle automatically on the TV</small><input type="number" min="5" max="120" required data-board-key="page_seconds" value="${editor.page_seconds}"></label><p class="muted small">${capacity(editor.template)} entries per page · ${Math.max(1, Math.ceil(editor.items.length / capacity(editor.template)))} page(s)</p></section></form><aside class="editor-preview"><section class="panel"><div class="panel-heading"><h2>Live preview</h2><span class="badge neutral">16:9</span></div><div id="editor-preview">${frame(editor)}</div><div class="preview-caption"><span>Previewing your draft</span><button class="small-link" data-action="next-preview">Next page ${icon("chevron")}</button></div></section><section class="panel"><h2>Choose your theme</h2><p class="muted small">Same content. A different feel.</p><div class="theme-options">${spec.themes.map((theme, index) => `<button class="theme-option ${editor.theme === index ? "selected" : ""}" data-action="theme" data-theme="${index}" aria-pressed="${editor.theme === index}"><span class="theme-sample swatch-${editor.template}-${index}"><i></i><i></i><i></i></span><span>${esc(theme)}</span><span class="theme-check">${editor.theme === index ? "✓" : ""}</span></button>`).join("")}</div></section><div class="editor-tip">${icon("screens")}<p>Saving a draft keeps your live screens as they are. Publish when you’re ready. Screens update within about five seconds.</p></div></aside></div>`;
+  return `<div class="editor-toolbar"><div><button class="icon-btn" data-nav="boards" aria-label="Back to boards">${icon("back")}</button><div><h1>${esc(editor.name)}</h1><span id="save-status">${dirty ? "Unsaved changes" : record.published_revision === record.revision ? "Published · All changes saved" : "Draft · Not published"}</span></div></div><div><button class="btn" data-action="preview-editor">${icon("eye")}<span>Preview</span></button><button class="btn" data-action="save-board">Save draft</button><button class="btn primary" data-action="publish-board">${icon("arrow")}Publish board</button></div></div><div class="editor-layout"><form id="editor-form" class="editor-fields"><section class="panel"><div class="panel-heading"><span class="section-icon">${icon(spec.icon)}</span><div><h2>Make it your board</h2><p>${esc(spec.name)}</p></div></div><label>Board name <small>Only shown in your workspace</small><input data-board-key="name" maxlength="80" required value="${esc(editor.name)}"></label><label>Display title<input data-board-key="title" maxlength="100" required value="${esc(editor.title)}"></label><label>Subtitle<input data-board-key="subtitle" maxlength="180" value="${esc(editor.subtitle)}"></label>${editor.template === "production" ? `<label>Plan date <small>Shown on the display in ${esc(state.settings.timezone)}</small><input type="date" data-board-key="date" value="${esc(editor.auto_date ? currentDate(state.settings.timezone) : editor.date)}" ${editor.auto_date ? "disabled" : ""}></label><label class="auto-date-toggle"><input type="checkbox" role="switch" data-board-key="auto_date" ${editor.auto_date ? "checked" : ""}><span>Automatically use today's date<small>Updates every day. Turn off to keep a fixed date.</small></span></label>` : ""}</section><section class="panel entries-panel"><div class="panel-heading"><div><h2>${editor.template === "production" ? "Production tasks" : "Board entries"} <span class="count-pill">${editor.items.length}</span></h2><p>${editor.template === "production" ? "Drag the handle or use the arrows to reorder. Completed tasks stay here and are hidden on the display." : "Entries appear in this order on your display."}</p></div><button type="button" class="btn compact" data-action="add-entry">${icon("plus")}Add</button></div><div id="entry-list">${entryListHTML()}</div>${!editor.items.length ? '<p class="empty-inline">Add your first entry to bring this board to life.</p>' : ""}<button type="button" class="btn full dashed" data-action="add-entry">${icon("plus")}Add ${editor.template === "production" ? "task" : "entry"}</button></section><section class="panel"><h2>The finishing touches</h2><label>Footer message<textarea data-board-key="footer" maxlength="250" rows="2">${esc(editor.footer)}</textarea></label><label>Seconds per page <small>Long boards cycle automatically on the TV</small><input type="number" min="5" max="120" required data-board-key="page_seconds" value="${editor.page_seconds}"></label><p class="muted small">${capacity(editor.template)} entries per page · ${pageCount(editor)} page(s)</p></section></form><aside class="editor-preview"><section class="panel"><div class="panel-heading"><h2>Live preview</h2><span class="badge neutral">16:9</span></div><div id="editor-preview">${frame(editor)}</div><div class="preview-caption"><span>Previewing your draft</span><button class="small-link" data-action="next-preview">Next page ${icon("chevron")}</button></div></section><section class="panel"><h2>Choose your theme</h2><p class="muted small">Same content. A different feel.</p><div class="theme-options">${spec.themes.map((theme, index) => `<button class="theme-option ${editor.theme === index ? "selected" : ""}" data-action="theme" data-theme="${index}" aria-pressed="${editor.theme === index}"><span class="theme-sample swatch-${editor.template}-${index}"><i></i><i></i><i></i></span><span>${esc(theme)}</span><span class="theme-check">${editor.theme === index ? "✓" : ""}</span></button>`).join("")}</div></section><div class="editor-tip">${icon("screens")}<p>Saving a draft keeps your live screens as they are. Publish when you’re ready. Screens update within about five seconds.</p></div></aside></div>`;
 }
 function entryListHTML() {
   const spec = catalog[editor.template];
   return editor.items
     .map(
       (item, index) =>
-        `<article class="entry-card"><div class="entry-header"><span>ENTRY ${String(index + 1).padStart(2, "0")}</span><div><button class="icon-btn" type="button" title="Move up" aria-label="Move entry ${index + 1} up" data-action="move-entry" data-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button class="icon-btn" type="button" title="Move down" aria-label="Move entry ${index + 1} down" data-action="move-entry" data-index="${index}" data-direction="1" ${index === editor.items.length - 1 ? "disabled" : ""}>↓</button><button class="icon-btn" type="button" title="Remove entry" aria-label="Remove entry ${index + 1}" data-action="remove-entry" data-index="${index}">${icon("trash")}</button></div></div><div class="entry-fields">${spec.columns.map(([key, label]) => `<label class="field-${key}">${esc(label)}${entryInput(key, item[key] || "", index)}</label>`).join("")}</div></article>`,
+        `<article class="entry-card" data-entry-index="${index}"><div class="entry-header"><span>${editor.template === "production" ? `<button class="icon-btn drag-handle" type="button" title="Drag to reorder task" aria-label="Drag task ${index + 1} to reorder">⠿</button>` : ""}ENTRY ${String(index + 1).padStart(2, "0")}</span><div><button class="icon-btn" type="button" title="Move up" aria-label="Move entry ${index + 1} up" data-action="move-entry" data-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button class="icon-btn" type="button" title="Move down" aria-label="Move entry ${index + 1} down" data-action="move-entry" data-index="${index}" data-direction="1" ${index === editor.items.length - 1 ? "disabled" : ""}>↓</button>${editor.template === "production" ? `<button class="icon-btn" type="button" title="Duplicate task" aria-label="Duplicate task ${index + 1}" data-action="duplicate-entry" data-index="${index}" ${editor.items.length >= 100 ? "disabled" : ""}>${icon("copy")}</button>` : ""}<button class="icon-btn" type="button" title="Remove entry" aria-label="Remove entry ${index + 1}" data-action="remove-entry" data-index="${index}">${icon("trash")}</button></div></div><div class="entry-fields">${spec.columns.map(([key, label]) => `<label class="field-${key}">${esc(label)}${entryInput(key, item[key] || "", index)}${key === "owner" && editor.template === "production" ? assigneePills(index) : ""}</label>`).join("")}</div></article>`,
     )
     .join("");
+}
+function assigneePills(index) {
+  const owners = topAssignees(state.assignment_history, editor.items,
+    state.boards[editor.id].draft.items);
+  return `<span class="assignee-pills" data-owner-pills="${index}" aria-label="Frequent assignees">${owners.map((owner) => `<button type="button" class="assignee-pill" data-action="assign-owner" data-index="${index}" data-owner="${esc(owner)}">${esc(owner)}</button>`).join("")}</span>`;
+}
+function refreshAssigneePills() {
+  document.querySelectorAll("[data-owner-pills]").forEach((el) => {
+    el.outerHTML = assigneePills(Number(el.dataset.ownerPills));
+  });
 }
 function entryInput(key, value, index) {
   const attrs = `data-item-index="${index}" data-item-key="${key}"`;
@@ -299,7 +311,7 @@ function entryInput(key, value, index) {
       key === "status"
         ? ["To do", "In progress", "Done", "Blocked"]
         : ["Normal", "High", "Urgent"];
-    return `<select ${attrs}>${options.map((o) => option(o, o, value)).join("")}</select>`;
+    return `<select ${attrs}>${options.map((o) => option(o, o === "Done" ? "Complete" : o, value)).join("")}</select>`;
   }
   if (key === "detail")
     return `<textarea ${attrs} maxlength="250" rows="2">${esc(value)}</textarea>`;
@@ -321,13 +333,88 @@ function bindEditor() {
     .addEventListener("submit", (event) => event.preventDefault());
   document.querySelector("#editor-form").addEventListener("input", (event) => {
     const el = event.target;
-    if (el.dataset.boardKey)
+    if (el.dataset.boardKey === "auto_date") {
+      editor.auto_date = el.checked;
+      editor.date = currentDate(state.settings.timezone);
+      const dateInput = document.querySelector('[data-board-key="date"]');
+      dateInput.value = editor.date;
+      dateInput.disabled = el.checked;
+    } else if (el.dataset.boardKey)
       editor[el.dataset.boardKey] =
         el.dataset.boardKey === "page_seconds" ? Number(el.value) : el.value;
     if (el.dataset.itemKey)
       editor.items[Number(el.dataset.itemIndex)][el.dataset.itemKey] = el.value;
     markDirty();
     updateEditorPreview();
+  });
+  document.querySelector("#editor-form").addEventListener("change", (event) => {
+    if (event.target.dataset.itemKey === "owner") refreshAssigneePills();
+  });
+  bindTaskDrag();
+}
+
+function bindTaskDrag() {
+  if (editor.template !== "production") return;
+  const list = document.querySelector("#entry-list");
+  list.addEventListener("pointerdown", (event) => {
+    const handle = event.target.closest(".drag-handle");
+    if (!handle || event.button !== 0) return;
+    event.preventDefault();
+    const card = handle.closest(".entry-card");
+    const from = Number(card.dataset.entryIndex);
+    let target = from, dragging = false, scrollFrame;
+    let pointerY = event.clientY;
+    const clearTargets = () => list.querySelectorAll(".drop-before, .drop-after")
+      .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+    const locate = () => {
+      clearTargets();
+      target = 0;
+      for (const other of list.querySelectorAll(".entry-card")) {
+        if (other === card) continue;
+        const bounds = other.getBoundingClientRect();
+        if (pointerY > bounds.top + bounds.height / 2) target++;
+      }
+      const others = [...list.querySelectorAll(".entry-card")].filter((el) => el !== card);
+      if (target < others.length) others[target].classList.add("drop-before");
+      else others.at(-1)?.classList.add("drop-after");
+    };
+    const scroll = () => {
+      if (!dragging) return;
+      const edge = 80;
+      const delta = pointerY < edge ? -16 : pointerY > innerHeight - edge ? 16 : 0;
+      if (delta) { window.scrollBy(0, delta); locate(); }
+      scrollFrame = requestAnimationFrame(scroll);
+    };
+    handle.setPointerCapture(event.pointerId);
+    const move = (e) => {
+      pointerY = e.clientY;
+      if (!dragging && Math.abs(e.clientY - event.clientY) < 5) return;
+      if (!dragging) {
+        dragging = true;
+        card.classList.add("dragging");
+        scrollFrame = requestAnimationFrame(scroll);
+      }
+      locate();
+    };
+    const finish = (e) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", finish);
+      handle.removeEventListener("pointercancel", finish);
+      handle.removeEventListener("lostpointercapture", finish);
+      cancelAnimationFrame(scrollFrame);
+      card.classList.remove("dragging");
+      clearTargets();
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      if (e.type === "pointerup" && dragging && moveTask(editor.items, from, target)) {
+        markDirty();
+        render();
+        document.querySelector(`[data-entry-index="${target}"] .drag-handle`)?.focus({ preventScroll: true });
+      }
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+    handle.addEventListener("lostpointercapture", finish);
   });
 }
 
@@ -483,7 +570,7 @@ function previewModal(board, templateKey) {
       modal.querySelector("[data-preview-page]").onclick = () => {
         page =
           (page + 1) %
-          Math.max(1, Math.ceil(board.items.length / capacity(board.template)));
+          pageCount(board);
         modal.querySelector(".modal-preview-frame").innerHTML =
           `<div class="board-frame">${boardHTML({ ...board, theme }, state.settings, page)}</div>`;
         fitBoards(modal);
@@ -589,7 +676,7 @@ root.addEventListener("click", async (event) => {
     if (action === "next-preview") {
       previewPage =
         (previewPage + 1) %
-        Math.max(1, Math.ceil(editor.items.length / capacity(editor.template)));
+        pageCount(editor);
       updateEditorPreview();
     }
     if (action === "add-entry") {
@@ -611,6 +698,26 @@ root.addEventListener("click", async (event) => {
       last.scrollIntoView({ behavior: "smooth", block: "center" });
       last.querySelector("input").focus({ preventScroll: true });
     }
+    if (action === "assign-owner") {
+      const index = Number(button.dataset.index);
+      editor.items[index].owner = button.dataset.owner;
+      document.querySelector(`[data-item-index="${index}"][data-item-key="owner"]`).value = button.dataset.owner;
+      markDirty();
+      refreshAssigneePills();
+      updateEditorPreview();
+    }
+    if (action === "duplicate-entry") {
+      const index = Number(button.dataset.index);
+      if (!duplicateTask(editor.items, index)) {
+        toast("Use up to 100 entries per board.", true);
+        return;
+      }
+      markDirty();
+      render();
+      const copy = document.querySelector(`[data-entry-index="${index + 1}"]`);
+      copy.scrollIntoView({ behavior: "smooth", block: "center" });
+      copy.querySelector("input").focus({ preventScroll: true });
+    }
     if (action === "remove-entry") {
       editor.items.splice(Number(button.dataset.index), 1);
       markDirty();
@@ -619,10 +726,7 @@ root.addEventListener("click", async (event) => {
     if (action === "move-entry") {
       const index = Number(button.dataset.index),
         target = index + Number(button.dataset.direction);
-      [editor.items[index], editor.items[target]] = [
-        editor.items[target],
-        editor.items[index],
-      ];
+      if (!moveTask(editor.items, index, target)) return;
       markDirty();
       render();
     }
@@ -717,7 +821,13 @@ modal.addEventListener("click", (event) => {
   if (event.target === modal) modal.close();
 });
 setInterval(() => {
-  if (state) updateClocks(document, state.settings.timezone);
+  if (state) {
+    updateClocks(document, state.settings.timezone);
+    if (editor?.auto_date) {
+      const input = document.querySelector('[data-board-key="date"]');
+      if (input) input.value = currentDate(state.settings.timezone);
+    }
+  }
 }, 10000);
 setInterval(async () => {
   if (

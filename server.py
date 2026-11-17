@@ -1,5 +1,6 @@
 """Singularity: a local-first, hardware-independent display server."""
 import hashlib
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,9 @@ def validate_board(value):
         except ValueError:
             require(False, "Use a valid YYYY-MM-DD date.")
     result["date"] = day
+    auto_date = value.get("auto_date", False)
+    require(type(auto_date) is bool, "Automatic date must be on or off.")
+    result["auto_date"] = auto_date
     seconds = value.get("page_seconds", 15)
     require(type(seconds) is int and 5 <= seconds <= 120, "Page duration must be 5–120 seconds.")
     result["page_seconds"] = seconds
@@ -134,6 +138,27 @@ def resolve_board(state, slug, instant=None):
     return state["screens"][slug]["board"], False
 
 
+def assignment_counts(board):
+    return Counter(item.get("owner", "").strip() for item in board["items"]
+                   if board["template"] == "production" and item.get("owner", "").strip())
+
+
+def assignment_history(state):
+    if "assignment_history" not in state:
+        counts = Counter()
+        for record in state["boards"].values():
+            counts.update(assignment_counts(record["draft"]))
+        state["assignment_history"] = dict(counts)
+    return state["assignment_history"]
+
+
+def record_assignments(state, board, previous=None):
+    history = assignment_history(state)
+    added = assignment_counts(board) - (assignment_counts(previous) if previous else Counter())
+    for owner, count in added.items():
+        history[owner] = history.get(owner, 0) + count
+
+
 def initial_state():
     state = {"settings": {"site_name": "Singularity workspace", "timezone": os.environ.get("TZ", "America/New_York")}, "boards": {}, "screens": {}, "schedules": []}
     for template in ("production", "briefing", "safety"):
@@ -183,7 +208,9 @@ def create_app(data_dir=None, testing=False):
         connection.execute("INSERT OR IGNORE INTO state VALUES (1, ?)", (json.dumps(initial_state()),))
 
     def read_state(connection):
-        return json.loads(connection.execute("SELECT payload FROM state WHERE id=1").fetchone()[0])
+        state = json.loads(connection.execute("SELECT payload FROM state WHERE id=1").fetchone()[0])
+        assignment_history(state)
+        return state
 
     def save_state(connection, state):
         connection.execute("UPDATE state SET payload=? WHERE id=1", (json.dumps(state),))
@@ -330,6 +357,7 @@ def create_app(data_dir=None, testing=False):
             else:
                 require(isinstance(body.get("template"), str) and body["template"] in CATALOG, "Choose a template.")
                 board = new_board(body["template"])
+            record_assignments(state, board)
             state["boards"][board["id"]] = {"draft": board, "published": None, "revision": 1, "published_revision": 0, "updated": now()}
             save_state(connection, state)
         return jsonify(id=board["id"]), 201
@@ -352,6 +380,7 @@ def create_app(data_dir=None, testing=False):
                 board = validate_board(body.get("board"))
                 require(board["template"] == record["draft"]["template"], "A board's template cannot be changed.")
                 board["id"] = bid
+                record_assignments(state, board, record["draft"])
                 record["draft"] = board
                 record["revision"] += 1
                 record["updated"] = now()
@@ -458,6 +487,16 @@ def create_app(data_dir=None, testing=False):
             require(isinstance(bid, str) and bid in restored["boards"] and restored["boards"][bid]["published"], "Backup screen references an unpublished or missing board.")
             restored["screens"][slug] = {"name": text(screen.get("name"), "Screen name", 80, True), "board": bid}
         restored["schedules"] = validate_rules(raw.get("schedules"), restored)
+        if "assignment_history" in raw:
+            history = raw["assignment_history"]
+            require(isinstance(history, dict), "Invalid assignment history.")
+            restored["assignment_history"] = {}
+            for owner, count in history.items():
+                clean_owner = text(owner, "Assignee", 100, True)
+                require(type(count) is int and 0 < count <= 10**15, "Invalid assignment count.")
+                restored["assignment_history"][clean_owner] = count
+        else:
+            assignment_history(restored)
         with db(True) as connection:
             save_state(connection, restored)
             connection.execute("DELETE FROM presence")
